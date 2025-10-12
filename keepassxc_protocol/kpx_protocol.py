@@ -121,7 +121,7 @@ class Connection:
         response = message.send(self.send_encrypted)
         return response
 
-    def associate(self) -> bool:
+    def associate(self) -> resp.AssociateResponse:
         id_public_key = PrivateKey.generate().public_key
 
         message = req.AssociateRequest(config=self.config, id_public_key=id_public_key)
@@ -131,7 +131,8 @@ class Connection:
         self.config.associates.add(
             db_hash=db_hash, associate=Associate(db_hash=db_hash, id=response.id, key=id_public_key))
 
-        return True
+        self.test_associate()
+        return response
 
     def load_associates_json(self, associates_json: str) -> None:
         """Loads associates from JSON string"""
@@ -151,22 +152,18 @@ class Connection:
         """Domps associates to Associates object"""
         return self.config.associates.model_copy(deep=True)
 
-    def test_associate(self, trigger_unlock: bool = False) -> bool:
-        try:
-            db_hash = self.get_databasehash().hash
-            associate = self.config.associates.get_by_hash(db_hash)
-            message = req.TestAssociateRequest(
-                config=self.config,
-                id=associate.id,
-                key=associate.key_utf8,
-            )
-            response = message.send(self.send_encrypted)
-            if response.success == "true":
-                return True
-        except KeyError:
-            pass
+    def test_associate(self, trigger_unlock: bool = False) -> resp.TestAssociateResponse:
+        db_hash = self.get_databasehash().hash
+        associate = self.config.associates.get_by_hash(db_hash)
+        message = req.TestAssociateRequest(
+            config=self.config,
+            id=associate.id,
+            key=associate.key_utf8,
+        )
+        response = message.send(self.send_encrypted)
+        return response
 
-        return False
+
 
     def get_logins(self, url: str) -> resp.GetLoginsResponse:
         # noinspection HttpUrlsUsage

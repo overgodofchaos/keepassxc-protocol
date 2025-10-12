@@ -12,6 +12,11 @@ def con() -> keepassxc_protocol.Connection:
     return con
 
 
+def test_test_associate(con: keepassxc_protocol.Connection) -> None:
+    response = con.test_associate()
+    assert response.success == "true"
+
+
 def test_get_databasehash(con: keepassxc_protocol.Connection) -> None:
     response = con.get_databasehash()
 

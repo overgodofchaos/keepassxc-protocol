@@ -1,0 +1,40 @@
+[project]
+name = "keepassxc-protocol"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "overgod",email = "vezonzzzzzz@gmail.com"}
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12,<4.0"
+keywords = [
+    "keepassxc",
+    "keepassxc-protocol",
+    "keepassxc-python",
+    "password manager",
+    "keepassxc gui"
+]
+
+dependencies = [
+    "loguru (>=0.7.3,<1.0.0)",
+    "pydantic (>=2.11.9,<3.0.0)",
+    "pywin32 (>=300,<400); sys_platform == 'win32'",
+    "pynacl (>=1.5.0,<2.0.0)",
+    "websockets (>=15.0)"
+]
+
+packages = [
+    { include = "keepassxc_protocol" }
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = true
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.2"
+

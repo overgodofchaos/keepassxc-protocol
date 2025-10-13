@@ -191,23 +191,6 @@ class Connection:
 
         return response
 
-    # def get_database_groups(self) -> dict:
-    #     msg = {
-    #         "action": "get-database-groups",
-    #     }
-    #
-    #     self.send_encrypted_message(msg)
-    #     response = self.get_encrypted_response()
-    #     return response
-
-    # def get_database_entries(self) -> dict:
-    #     msg = {
-    #         "action": "get-database-entries",
-    #     }
-    #
-    #     self.send_encrypted_message(msg)
-    #     response = self.get_encrypted_response()
-    #     return response
 
     def get_unencrypted_response(self) -> dict:
         data = []

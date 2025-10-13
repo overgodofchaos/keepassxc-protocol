@@ -7,9 +7,8 @@ from typing import Generic, TypeVar, get_args
 from nacl.public import PublicKey
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, computed_field
 
-from .connection_config import ConnectionConfig
-
 from . import errors
+from .connection_config import ConnectionConfig
 from .errors import ResponseUnsuccesfulException
 
 debug = True if os.environ.get("KPX_PROTOCOL_DEBUG") else False

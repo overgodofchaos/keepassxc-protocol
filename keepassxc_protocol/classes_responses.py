@@ -6,14 +6,6 @@ from .classes import KPXProtocolResponse
 
 
 class ChangePublicKeysResponse(KPXProtocolResponse):
-    """
-{
-    "action": "change-public-keys",
-    "version": "2.7.0",
-    "publicKey": "<host public key>",
-    "success": "true"
-}
-    """
     action: str
     version: str
     publicKey: str
@@ -21,13 +13,6 @@ class ChangePublicKeysResponse(KPXProtocolResponse):
 
 
 class GetDatabasehashResponse(KPXProtocolResponse):
-    """
-{
-    "action": "hash",
-    "hash": "29234e32274a32276e25666a42",
-    "version": "2.2.0"
-}
-    """
     hash: str
     version: str
     nonce: str
@@ -35,15 +20,6 @@ class GetDatabasehashResponse(KPXProtocolResponse):
 
 
 class AssociateResponse(KPXProtocolResponse):
-    """
-{
-    "hash": "29234e32274a32276e25666a42",
-    "version": "2.7.0",
-    "success": "true",
-    "id": "testclient",
-    "nonce": "tZvLrBzkQ9GxXq9PvKJj4iAnfPT0VZ3Q"
-}
-    """
     hash: str
     version: str
     success: Literal["true"]
@@ -52,15 +28,6 @@ class AssociateResponse(KPXProtocolResponse):
 
 
 class TestAssociateResponse(KPXProtocolResponse):
-    """
-{
-    "version": "2.7.0",
-    "nonce": "tZvLrBzkQ9GxXq9PvKJj4iAnfPT0VZ3Q",
-    "hash": "29234e32274a32276e25666a42",
-    "id": "testclient",
-    "success": "true"
-}
-    """
     hash: str
     version: str
     success: Literal["true"]
@@ -69,33 +36,16 @@ class TestAssociateResponse(KPXProtocolResponse):
 
 
 class Login(BaseModel):
+    group: str | None = None
     login: str
     name: str
     password: str
+    uuid: str
+    stringFields: list[str] = Field(default_factory=list)
+    totp: str | None = None
 
 
 class GetLoginsResponse(KPXProtocolResponse):
-    """
-{
-    "count": "2",
-    "entries" : [
-    {
-        "login": "user1",
-        "name": "user1",
-        "password": "passwd1"
-    },
-    {
-        "login": "user2",
-        "name": "user2",
-        "password": "passwd2",
-        "expired": "true"
-    }],
-    "nonce": "tZvLrBzkQ9GxXq9PvKJj4iAnfPT0VZ3Q",
-    "success": "true",
-    "hash": "29234e32274a32276e25666a42",
-    "version": "2.2.0"
-}
-    """
     count: int
     nonce: str
     success: Literal["true"]

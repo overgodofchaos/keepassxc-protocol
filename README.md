@@ -6,7 +6,7 @@ Actions ([link](https://github.com/keepassxreboot/keepassxc-browser/blob/develop
 * ✅get-database-gropus
 * ✅get-databasehash
 * ✅get-logins
-* ❌get-totp
+* ❌get-totp *(totp is available in get-logins)*
 * ❌lock-database
 * ❌request-autotype
 * ❌set-login

@@ -12,7 +12,6 @@ from loguru import logger
 from nacl.public import Box, PrivateKey, PublicKey
 from pydantic import ValidationError
 
-from . import classes as k
 from . import classes_requests as req
 from . import classes_responses as resp
 from .connection_config import Associate, Associates, ConnectionConfig
@@ -26,7 +25,7 @@ if platform.system() == "Windows":
 
     import win32file
 
-R = TypeVar("R", bound=resp.BaseResponse)
+_R = TypeVar("_R", bound=resp.BaseResponse)
 
 
 class Connection:
@@ -63,10 +62,7 @@ class Connection:
         return response
 
 
-    def _encrypt_message(self,
-                         message: req.BaseMessage,
-                        ) -> req.EncryptedRequest:
-
+    def _encrypt_message(self, message: req.BaseMessage) -> req.EncryptedRequest:
         log.debug(f"Unencrypted message:\n{message.model_dump_json(indent=2)}\n")
 
         return req.EncryptedRequest(config=self.config, unencrypted_message=message)
@@ -130,9 +126,9 @@ class Connection:
         else:
             return os.path.join("/tmp", server_name)
 
-    def request(self,
-                message: req.BaseRequest | req.BaseMessage,
-                response_type: type[R]) -> R:
+    def _request(self,
+                 message: req.BaseRequest | req.BaseMessage,
+                 response_type: type[_R]) -> _R:
         if isinstance(message, req.BaseRequest):
             data = self._send(message)
         else:
@@ -147,18 +143,18 @@ class Connection:
 
     def change_public_keys(self) -> resp.ChangePublicKeysResponse:
         message = req.ChangePublicKeysRequest(config=self.config)
-        return self.request(message, resp.ChangePublicKeysResponse)
+        return self._request(message, resp.ChangePublicKeysResponse)
 
     def get_databasehash(self) -> resp.GetDatabasehashResponse:
-        message = req.GetDatabasehashRequest(config=self.config)
-        response = message.send(self.send_encrypted)
-        return response
+        message = req.GetDatabasehashMessage(config=self.config)
+        return self._request(message, resp.GetDatabasehashResponse)
 
     def associate(self) -> resp.AssociateResponse:
         id_public_key = PrivateKey.generate().public_key
 
-        message = req.AssociateRequest(config=self.config, id_public_key=id_public_key)
-        response = message.send(self.send_encrypted)
+        message = req.AssociateMessage(config=self.config, id_public_key=id_public_key)
+        response = self._request(message, resp.AssociateResponse)
+
         db_hash = self.get_databasehash().hash
 
         self.config.associates.add(
@@ -190,13 +186,12 @@ class Connection:
     def test_associate(self, trigger_unlock: bool = False) -> resp.TestAssociateResponse:
         db_hash = self.get_databasehash().hash
         associate = self.config.associates.get_by_hash(db_hash)
-        message = req.TestAssociateRequest(
+        message = req.TestAssociateMessage(
             config=self.config,
             id=associate.id,
             key=associate.key_utf8,
         )
-        response = message.send(self.send_encrypted)
-        return response
+        return self._request(message, resp.TestAssociateResponse)
 
 
     def get_logins(self, url: str) -> resp.GetLoginsResponse:
@@ -207,23 +202,15 @@ class Connection:
 
         db_hash = self.get_databasehash().hash
 
-        message = req.GetLoginsRequest(
+        message = req.GetLoginsMessage(
             config=self.config,
             url=url,
             associates=self.config.associates,
             db_hash=db_hash,
         )
 
-        response = message.send(self.send_encrypted)
-
-        return response
+        return self._request(message, resp.GetLoginsResponse)
 
     def get_database_groups(self) -> resp.GetDatabaseGroupsResponse:
-
-        message = req.GetDatabaseGroupsRequest(config=self.config)
-        response = message.send(self.send_encrypted)
-
-        return response
-
-
-
+        message = req.GetDatabaseGroupsMessage(config=self.config)
+        return self._request(message, resp.GetDatabaseGroupsResponse)

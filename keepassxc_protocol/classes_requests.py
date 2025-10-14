@@ -1,14 +1,11 @@
 import base64
-import json
-from collections.abc import Callable
 
-from nacl.public import Box, PrivateKey, PublicKey
-from pydantic import Field, PrivateAttr, ValidationError, computed_field
+from nacl.public import PublicKey
+from pydantic import Field, PrivateAttr, computed_field
 
 from . import classes_responses as responses
 from .classes import KPXProtocol
 from .connection_config import Associates, ConnectionConfig
-from .errors import ResponseUnsuccesfulException
 
 
 class _BaseMessage(KPXProtocol):
@@ -121,7 +118,7 @@ class AssociateMessage(BaseMessage):
         return base64.b64encode(self.id_public_key._public_key).decode("utf-8")
 
 
-class TestAssociateRequest(KPXProtocolRequest[responses.TestAssociateResponse]):
+class TestAssociateMessage(BaseMessage):
     """
 {
     "action": "test-associate",
@@ -135,7 +132,7 @@ class TestAssociateRequest(KPXProtocolRequest[responses.TestAssociateResponse]):
     key: str
 
 
-class GetLoginsRequest(KPXProtocolRequest[responses.GetLoginsResponse]):
+class GetLoginsMessage(BaseMessage):
     """
 {
     "action": "get-logins",
@@ -166,7 +163,7 @@ class GetLoginsRequest(KPXProtocolRequest[responses.GetLoginsResponse]):
         return [{"id": a.id, "key": a.key_utf8} for a in [cada, *others]]
 
 
-class GetDatabaseGroupsRequest(KPXProtocolRequest[responses.GetDatabaseGroupsResponse]):
+class GetDatabaseGroupsMessage(BaseMessage):
     """
 {
     "action": "get-database-groups"
@@ -174,5 +171,3 @@ class GetDatabaseGroupsRequest(KPXProtocolRequest[responses.GetDatabaseGroupsRes
     """
     _action: str = PrivateAttr("get-database-groups")
     _response = responses.GetDatabaseGroupsResponse
-
-

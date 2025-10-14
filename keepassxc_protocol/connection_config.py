@@ -1,13 +1,9 @@
 import base64
-import socket
 from functools import cached_property
-from typing import List
 
 from nacl.public import Box, PrivateKey, PublicKey
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from pydantic_core.core_schema import FieldSerializationInfo
-
-from .winpipe import WinNamedPipe
 
 
 class Associate(BaseModel):

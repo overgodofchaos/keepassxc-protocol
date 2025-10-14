@@ -49,7 +49,7 @@ class Connection:
               request: req.BaseRequest
               ) -> dict:
 
-        log.debug(f"Sending request:\n{request.model_dump_json(indent=2)}\n")
+        log.debug(f"Sending request:\n{request.model_dump_json(indent=2, exclude={"config"})}\n")
 
         request = request.to_bytes()
         self.socket.sendall(request)
@@ -102,11 +102,15 @@ class Connection:
         if path is None:
             path = Connection._get_socket_path()
 
+        log.debug(f"Connecting to {path}")
+
         self.socket.connect(path)
 
         response = self.change_public_keys()
 
         self.config.box = Box(self.config.private_key, PublicKey(base64.b64decode(response.publicKey)))
+
+        log.debug(f"Config: {self.config}")
 
     @staticmethod
     def _get_socket_path() -> str:
@@ -186,6 +190,10 @@ class Connection:
     def test_associate(self, trigger_unlock: bool = False) -> resp.TestAssociateResponse:
         db_hash = self.get_databasehash().hash
         associate = self.config.associates.get_by_hash(db_hash)
+
+        log.debug(f"DB hash: {db_hash}")
+        log.debug(f"Associate: {associate}")
+
         message = req.TestAssociateMessage(
             config=self.config,
             id=associate.id,

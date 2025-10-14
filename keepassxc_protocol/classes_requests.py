@@ -26,10 +26,6 @@ class BaseRequest(_BaseMessage):
     _action: str = PrivateAttr("none")
     trigger_unlock: bool = Field(default=False, exclude=True)
 
-    @property
-    def config(self) -> ConnectionConfig:
-        return self.unencrypted_request.config
-
     @computed_field()
     def nonce(self) -> str:
         return self.config.nonce_utf8

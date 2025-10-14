@@ -1,15 +1,77 @@
 import base64
+import json
+from collections.abc import Callable
 
 from nacl.public import Box, PrivateKey, PublicKey
-from pydantic import Field, PrivateAttr, computed_field
+from pydantic import Field, PrivateAttr, ValidationError, computed_field
 
 from . import classes_responses as responses
-from .classes import KPXProtocolRequest, KPXProtocolResponse
-from .connection_config import Associates
+from .classes import KPXProtocol
+from .connection_config import Associates, ConnectionConfig
+from .errors import ResponseUnsuccesfulException
+
+
+class _BaseMessage(KPXProtocol):
+    _action: str = PrivateAttr("none")
+    config: ConnectionConfig = Field(exclude=True)
+
+    @computed_field
+    @property
+    def action(self) -> str:
+        return self._action
+
+
+class BaseMessage(_BaseMessage):
+    pass
+
+
+class BaseRequest(_BaseMessage):
+    _action: str = PrivateAttr("none")
+    trigger_unlock: bool = Field(default=False, exclude=True)
+
+    @property
+    def config(self) -> ConnectionConfig:
+        return self.unencrypted_request.config
+
+    @computed_field()
+    def nonce(self) -> str:
+        return self.config.nonce_utf8
+
+    # noinspection PyPep8Naming
+    @computed_field()
+    def clientID(self) -> str:
+        return self.config.client_id
+
+    # noinspection PyPep8Naming
+    @computed_field()
+    def triggerUnlock(self) -> str:
+        if self.trigger_unlock:
+            return "true"
+        else:
+            return "false"
+
+    def to_bytes(self) -> bytes:
+        return self.model_dump_json().encode("utf-8")
+
+
+class EncryptedRequest(BaseRequest):
+    unencrypted_message: BaseMessage = Field(exclude=True)
+
+    @computed_field()
+    def action(self) -> str:
+        return self.unencrypted_message.action
+
+    @computed_field()
+    def message(self) -> str:
+        msg = self.unencrypted_message
+        encrypted = base64.b64encode(
+            self.config.box.encrypt(msg.model_dump_json().encode("utf-8"),
+                                    nonce=self.config.nonce).ciphertext)
+        return encrypted.decode("utf-8")
 
 
 # noinspection PyPep8Naming
-class ChangePublicKeysRequest(KPXProtocolRequest[responses.ChangePublicKeysResponse]):
+class ChangePublicKeysRequest(BaseRequest):
     """
 {
     "action": "change-public-keys",
@@ -25,16 +87,8 @@ class ChangePublicKeysRequest(KPXProtocolRequest[responses.ChangePublicKeysRespo
     def publicKey(self) -> str:
         return self.config.public_key_utf8
 
-    @computed_field()
-    def nonce(self) -> str:
-        return self.config.nonce_utf8
 
-    @computed_field()
-    def clientID(self) -> str:
-        return self.config.client_id
-
-
-class GetDatabasehashRequest(KPXProtocolRequest[responses.GetDatabasehashResponse]):
+class GetDatabasehashMessage(BaseMessage):
     """
 {
     "action": "get-databasehash"
@@ -44,7 +98,7 @@ class GetDatabasehashRequest(KPXProtocolRequest[responses.GetDatabasehashRespons
     _response = responses.GetDatabasehashResponse
 
 
-class AssociateRequest(KPXProtocolRequest[responses.AssociateResponse]):
+class AssociateMessage(BaseMessage):
     """
 {
     "action": "associate",

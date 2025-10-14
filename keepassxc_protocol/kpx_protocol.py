@@ -5,7 +5,7 @@ import os
 import platform
 import socket
 from collections.abc import Buffer
-from typing import Any
+from typing import Any, TypeVar
 
 import nacl.utils
 from loguru import logger
@@ -26,6 +26,8 @@ if platform.system() == "Windows":
 
     import win32file
 
+R = TypeVar("R", bound=resp.BaseResponse)
+
 
 class Connection:
     def __init__(self) -> None:
@@ -42,48 +44,67 @@ class Connection:
             box=None
         )
 
-        self.connect()
+        self._connect()
 
-    def send(self,
-             message: k.KPXProtocolRequest,
-             path: tuple[Any, ...] | str | Buffer | None = None
-             ) -> dict:
+    def _send(self,
+              request: req.BaseRequest
+              ) -> dict:
 
-        if path is None:
-            path = Connection.get_socket_path()
+        log.debug(f"Sending request:\n{request.model_dump_json(indent=2)}\n")
 
-        log.debug(f"Sending unencrypted message:\n{message.model_dump_json(indent=2)}\n")
+        request = request.to_bytes()
+        self.socket.sendall(request)
+        self.config.increase_nonce()
 
-        message = message.to_bytes()
-        self.socket.sendall(message)
-        # self.config.increase_nonce()
-        response = self.get_unencrypted_response()
+        response = self._get_response()
 
         log.debug(f"Response:\n{json.dumps(response, indent=2)}")
 
         return response
 
-    def send_encrypted(self,
-                       message: k.KPXProtocolRequest,
-                       trigger_unlock: bool = False
-                       ) -> dict:
 
-        log.debug(f"Sending encrypted message:\n{message.model_dump_json(indent=2)}\n")
+    def _encrypt_message(self,
+                         message: req.BaseMessage,
+                        ) -> req.EncryptedRequest:
 
-        message = k.KPXEncryptedMessageRequest(unencrypted_request=message, trigger_unlock=trigger_unlock)
+        log.debug(f"Unencrypted message:\n{message.model_dump_json(indent=2)}\n")
 
-        log.debug(f"{message.model_dump_json(indent=2)}\n")
+        return req.EncryptedRequest(config=self.config, unencrypted_message=message)
 
-        self.socket.sendall(message.to_bytes())
-        response = self.get_encrypted_response()
+    def _decrypt(self, data: dict) -> dict:
 
-        log.debug(f"Response:\n{json.dumps(response, indent=2)}")
+        server_nonce = base64.b64decode(data["nonce"])
+        decrypted = self.config.box.decrypt(base64.b64decode(data["message"]), server_nonce)
+        unencrypted_message = json.loads(decrypted)
+
+        return unencrypted_message
+
+    def _get_response(self) -> dict:
+        data = []
+        while True:
+            new_data = self.socket.recv(4096)
+            if new_data:
+                data.append(new_data.decode('utf-8'))
+            else:
+                break
+            if len(new_data) < 4096:
+                break
+
+        json_data = json.loads("".join(data))
+
+        if "error" in json_data:
+            raise ResponseUnsuccesfulException(json_data)
+
+        if "message" in json_data:
+            response = self._decrypt(json_data)
+        else:
+            response = json_data
 
         return response
 
-    def connect(self, path: tuple[Any, ...] | str | Buffer | None = None) -> None:
+    def _connect(self, path: tuple[Any, ...] | str | Buffer | None = None) -> None:
         if path is None:
-            path = Connection.get_socket_path()
+            path = Connection._get_socket_path()
 
         self.socket.connect(path)
 
@@ -91,9 +112,8 @@ class Connection:
 
         self.config.box = Box(self.config.private_key, PublicKey(base64.b64decode(response.publicKey)))
 
-
     @staticmethod
-    def get_socket_path() -> str:
+    def _get_socket_path() -> str:
         server_name = "org.keepassxc.KeePassXC.BrowserServer"
         system = platform.system()
         if system == "Linux" and "XDG_RUNTIME_DIR" in os.environ:
@@ -110,11 +130,24 @@ class Connection:
         else:
             return os.path.join("/tmp", server_name)
 
+    def request(self,
+                message: req.BaseRequest | req.BaseMessage,
+                response_type: type[R]) -> R:
+        if isinstance(message, req.BaseRequest):
+            data = self._send(message)
+        else:
+            request = self._encrypt_message(message)
+            data = self._send(request)
+
+        try:
+            return response_type.model_validate(data)
+        except ValidationError as e:
+            data_ = json.dumps(data, indent=2)
+            raise ResponseUnsuccesfulException(f"{data_}\n{e!s}") from Exception
+
     def change_public_keys(self) -> resp.ChangePublicKeysResponse:
         message = req.ChangePublicKeysRequest(config=self.config)
-        response = message.send(self.send)
-        return response
-
+        return self.request(message, resp.ChangePublicKeysResponse)
 
     def get_databasehash(self) -> resp.GetDatabasehashResponse:
         message = req.GetDatabasehashRequest(config=self.config)
@@ -148,6 +181,8 @@ class Connection:
         """Dumps associates to JSON string"""
         return self.config.associates.model_dump_json()
 
+
+
     def dump_associates(self) -> Associates:
         """Domps associates to Associates object"""
         return self.config.associates.model_copy(deep=True)
@@ -162,7 +197,6 @@ class Connection:
         )
         response = message.send(self.send_encrypted)
         return response
-
 
 
     def get_logins(self, url: str) -> resp.GetLoginsResponse:
@@ -188,31 +222,6 @@ class Connection:
 
         message = req.GetDatabaseGroupsRequest(config=self.config)
         response = message.send(self.send_encrypted)
-
-        return response
-
-
-    def get_unencrypted_response(self) -> dict:
-        data = []
-        while True:
-            new_data = self.socket.recv(4096)
-            if new_data:
-                data.append(new_data.decode('utf-8'))
-            else:
-                break
-            if len(new_data) < 4096:
-                break
-        return json.loads(''.join(data))
-
-    def get_encrypted_response(self) -> dict:
-        raw_response = self.get_unencrypted_response()
-
-        if "error" in raw_response:
-            raise ResponseUnsuccesfulException(raw_response)
-
-        server_nonce = base64.b64decode(raw_response["nonce"])
-        decrypted = self.config.box.decrypt(base64.b64decode(raw_response["message"]), server_nonce)
-        response = json.loads(decrypted)
 
         return response
 

@@ -2,24 +2,28 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from .classes import KPXProtocolResponse
+from .classes import KPXProtocol
 
 
-class ChangePublicKeysResponse(KPXProtocolResponse):
+class BaseResponse(KPXProtocol):
+    pass
+
+
+class ChangePublicKeysResponse(BaseResponse):
     action: str
     version: str
     publicKey: str
     success: Literal["true"]
 
 
-class GetDatabasehashResponse(KPXProtocolResponse):
+class GetDatabasehashResponse(BaseResponse):
     hash: str
     version: str
     nonce: str
     success: Literal["true"]
 
 
-class AssociateResponse(KPXProtocolResponse):
+class AssociateResponse(BaseResponse):
     hash: str
     version: str
     success: Literal["true"]
@@ -27,7 +31,7 @@ class AssociateResponse(KPXProtocolResponse):
     nonce: str
 
 
-class TestAssociateResponse(KPXProtocolResponse):
+class TestAssociateResponse(BaseResponse):
     hash: str
     version: str
     success: Literal["true"]
@@ -45,7 +49,7 @@ class Login(BaseModel):
     totp: str | None = None
 
 
-class GetLoginsResponse(KPXProtocolResponse):
+class GetLoginsResponse(BaseResponse):
     count: int
     nonce: str
     success: Literal["true"]
@@ -70,7 +74,7 @@ class Groups(BaseModel):
     groups: list[Group] = Field(default_factory=list)
 
 
-class GetDatabaseGroupsResponse(KPXProtocolResponse):
+class GetDatabaseGroupsResponse(BaseResponse):
     nonce: str
     success: Literal["true"]
     version: str

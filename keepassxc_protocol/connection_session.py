@@ -135,3 +135,15 @@ class ConnectionSession(BaseModel):
 
     def sendall(self, data: bytes) -> None:
         self.socket.sendall(data)
+
+    def receive(self) -> str:
+        data = []
+        while True:
+            new_data = self.socket.recv(4096)
+            if new_data:
+                data.append(new_data.decode('utf-8'))
+            else:
+                break
+            if len(new_data) < 4096:
+                break
+        return "".join(data)

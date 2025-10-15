@@ -47,40 +47,29 @@ class Connection:
         log.debug(f"Session: {self.session}")
 
 
-    def _get_response(self) -> dict:
+    def _request(self, message: req.BaseRequest | req.BaseMessage, response_type: type[_R]) -> _R:
 
-        def decrypt(raw_data: dict) -> dict:
-            server_nonce = base64.b64decode(raw_data["nonce"])
-            decrypted = self.session.box.decrypt(base64.b64decode(raw_data["message"]), server_nonce)
-            unencrypted_message = json.loads(decrypted)
+        def get_response() -> dict:
+            def decrypt(raw_data: dict) -> dict:
+                server_nonce = base64.b64decode(raw_data["nonce"])
+                decrypted = self.session.box.decrypt(base64.b64decode(raw_data["message"]), server_nonce)
+                unencrypted_message = json.loads(decrypted)
 
-            return unencrypted_message
+                return unencrypted_message
 
-        data = []
-        while True:
-            new_data = self.session.socket.recv(4096)
-            if new_data:
-                data.append(new_data.decode('utf-8'))
+            json_data = json.loads(
+                self.session.receive()
+            )
+
+            if "error" in json_data:
+                raise ResponseUnsuccesfulException(json_data)
+
+            if "message" in json_data:
+                response = decrypt(json_data)
             else:
-                break
-            if len(new_data) < 4096:
-                break
+                response = json_data
 
-        json_data = json.loads("".join(data))
-
-        if "error" in json_data:
-            raise ResponseUnsuccesfulException(json_data)
-
-        if "message" in json_data:
-            response = decrypt(json_data)
-        else:
-            response = json_data
-
-        return response
-
-    def _request(self,
-                 message: req.BaseRequest | req.BaseMessage,
-                 response_type: type[_R]) -> _R:
+            return response
 
         def encrypt_message(unencrypted_message: req.BaseMessage) -> req.EncryptedRequest:
             log.debug(f"Unencrypted message:\n{unencrypted_message.model_dump_json(indent=2)}\n")
@@ -90,10 +79,10 @@ class Connection:
             log.debug(f"Sending request:\n{request.model_dump_json(indent=2)}\n")
 
             request = request.to_bytes()
-            self.session.socket.sendall(request)
+            self.session.sendall(request)
             self.session.increase_nonce()
 
-            response = self._get_response()
+            response = get_response()
 
             log.debug(f"Response:\n{json.dumps(response, indent=2)}")
 
@@ -146,8 +135,6 @@ class Connection:
     def dump_associate_json(self) -> str:
         """Dumps associates to JSON string"""
         return self.session.associates.model_dump_json()
-
-
 
     def dump_associates(self) -> Associates:
         """Domps associates to Associates object"""

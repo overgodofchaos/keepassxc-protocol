@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from . import classes_requests as req
 from . import classes_responses as resp
-from .connection_config import Associate, Associates, ConnectionConfig
+from .connection_session import Associate, Associates, ConnectionSession
 from .errors import ResponseUnsuccesfulException
 from .winpipe import WinNamedPipe
 
@@ -32,15 +32,16 @@ class Connection:
     def __init__(self) -> None:
 
         if platform.system() == "Windows":
-            self.socket = WinNamedPipe(win32file.GENERIC_READ | win32file.GENERIC_WRITE, win32file.OPEN_EXISTING)
+            socket_ = WinNamedPipe(win32file.GENERIC_READ | win32file.GENERIC_WRITE, win32file.OPEN_EXISTING)
         else:
-            self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            socket_ = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 
-        self.config = ConnectionConfig(
+        self.session = ConnectionSession(
             private_key=PrivateKey.generate(),
             nonce=nacl.utils.random(24),
             client_id=base64.b64encode(nacl.utils.random(24)).decode("utf-8"),
-            box=None
+            box=None,
+            socket=socket_
         )
 
         self._connect()
@@ -49,11 +50,11 @@ class Connection:
               request: req.BaseRequest
               ) -> dict:
 
-        log.debug(f"Sending request:\n{request.model_dump_json(indent=2, exclude={"config"})}\n")
+        log.debug(f"Sending request:\n{request.model_dump_json(indent=2)}\n")
 
         request = request.to_bytes()
-        self.socket.sendall(request)
-        self.config.increase_nonce()
+        self.session.socket.sendall(request)
+        self.session.increase_nonce()
 
         response = self._get_response()
 
@@ -65,12 +66,12 @@ class Connection:
     def _encrypt_message(self, message: req.BaseMessage) -> req.EncryptedRequest:
         log.debug(f"Unencrypted message:\n{message.model_dump_json(indent=2)}\n")
 
-        return req.EncryptedRequest(config=self.config, unencrypted_message=message)
+        return req.EncryptedRequest(session=self.session, unencrypted_message=message)
 
     def _decrypt(self, data: dict) -> dict:
 
         server_nonce = base64.b64decode(data["nonce"])
-        decrypted = self.config.box.decrypt(base64.b64decode(data["message"]), server_nonce)
+        decrypted = self.session.box.decrypt(base64.b64decode(data["message"]), server_nonce)
         unencrypted_message = json.loads(decrypted)
 
         return unencrypted_message
@@ -78,7 +79,7 @@ class Connection:
     def _get_response(self) -> dict:
         data = []
         while True:
-            new_data = self.socket.recv(4096)
+            new_data = self.session.socket.recv(4096)
             if new_data:
                 data.append(new_data.decode('utf-8'))
             else:
@@ -104,13 +105,13 @@ class Connection:
 
         log.debug(f"Connecting to {path}")
 
-        self.socket.connect(path)
+        self.session.socket.connect(path)
 
         response = self.change_public_keys()
 
-        self.config.box = Box(self.config.private_key, PublicKey(base64.b64decode(response.publicKey)))
+        self.session.box = Box(self.session.private_key, PublicKey(base64.b64decode(response.publicKey)))
 
-        log.debug(f"Config: {self.config}")
+        log.debug(f"Session: {self.session}")
 
     @staticmethod
     def _get_socket_path() -> str:
@@ -146,22 +147,22 @@ class Connection:
             raise ResponseUnsuccesfulException(f"{data_}\n{e!s}") from Exception
 
     def change_public_keys(self) -> resp.ChangePublicKeysResponse:
-        message = req.ChangePublicKeysRequest(config=self.config)
+        message = req.ChangePublicKeysRequest(session=self.session)
         return self._request(message, resp.ChangePublicKeysResponse)
 
     def get_databasehash(self) -> resp.GetDatabasehashResponse:
-        message = req.GetDatabasehashMessage(config=self.config)
+        message = req.GetDatabasehashMessage(session=self.session)
         return self._request(message, resp.GetDatabasehashResponse)
 
     def associate(self) -> resp.AssociateResponse:
         id_public_key = PrivateKey.generate().public_key
 
-        message = req.AssociateMessage(config=self.config, id_public_key=id_public_key)
+        message = req.AssociateMessage(session=self.session, id_public_key=id_public_key)
         response = self._request(message, resp.AssociateResponse)
 
         db_hash = self.get_databasehash().hash
 
-        self.config.associates.add(
+        self.session.associates.add(
             db_hash=db_hash, associate=Associate(db_hash=db_hash, id=response.id, key=id_public_key))
 
         self.test_associate()
@@ -169,33 +170,33 @@ class Connection:
 
     def load_associates_json(self, associates_json: str) -> None:
         """Loads associates from JSON string"""
-        self.config.associates = Associates.model_validate_json(associates_json)
+        self.session.associates = Associates.model_validate_json(associates_json)
         self.test_associate()
 
     def load_associates(self, associates: Associates) -> None:
         """Loads associates from Associates object"""
-        self.config.associates = associates.model_copy(deep=True)
+        self.session.associates = associates.model_copy(deep=True)
         self.test_associate()
 
     def dump_associate_json(self) -> str:
         """Dumps associates to JSON string"""
-        return self.config.associates.model_dump_json()
+        return self.session.associates.model_dump_json()
 
 
 
     def dump_associates(self) -> Associates:
         """Domps associates to Associates object"""
-        return self.config.associates.model_copy(deep=True)
+        return self.session.associates.model_copy(deep=True)
 
     def test_associate(self, trigger_unlock: bool = False) -> resp.TestAssociateResponse:
         db_hash = self.get_databasehash().hash
-        associate = self.config.associates.get_by_hash(db_hash)
+        associate = self.session.associates.get_by_hash(db_hash)
 
         log.debug(f"DB hash: {db_hash}")
         log.debug(f"Associate: {associate}")
 
         message = req.TestAssociateMessage(
-            config=self.config,
+            session=self.session,
             id=associate.id,
             key=associate.key_utf8,
         )
@@ -211,14 +212,14 @@ class Connection:
         db_hash = self.get_databasehash().hash
 
         message = req.GetLoginsMessage(
-            config=self.config,
+            session=self.session,
             url=url,
-            associates=self.config.associates,
+            associates=self.session.associates,
             db_hash=db_hash,
         )
 
         return self._request(message, resp.GetLoginsResponse)
 
     def get_database_groups(self) -> resp.GetDatabaseGroupsResponse:
-        message = req.GetDatabaseGroupsMessage(config=self.config)
+        message = req.GetDatabaseGroupsMessage(session=self.session)
         return self._request(message, resp.GetDatabaseGroupsResponse)

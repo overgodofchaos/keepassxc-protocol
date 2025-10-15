@@ -1,5 +1,3 @@
-from tokenize import group
-
 import pytest
 
 import keepassxc_protocol

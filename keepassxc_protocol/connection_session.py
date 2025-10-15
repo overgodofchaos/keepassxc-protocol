@@ -1,9 +1,12 @@
 import base64
+import socket
 from functools import cached_property
 
 from nacl.public import Box, PrivateKey, PublicKey
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from pydantic_core.core_schema import FieldSerializationInfo
+
+from keepassxc_protocol.winpipe import WinNamedPipe
 
 
 class Associate(BaseModel):
@@ -60,7 +63,7 @@ class Associates(BaseModel):
         self.entries[db_hash] = associate.model_copy(deep=True)
 
 
-class ConnectionConfig(BaseModel):
+class ConnectionSession(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
@@ -71,6 +74,7 @@ class ConnectionConfig(BaseModel):
     client_id: str
     box: Box | None = None
     associates: Associates = Associates()
+    socket: WinNamedPipe | socket.socket
 
     @cached_property
     def public_key(self) -> PublicKey:
@@ -95,3 +99,6 @@ class ConnectionConfig(BaseModel):
 
     def increase_nonce(self) -> None:
         self.nonce = (int.from_bytes(self.nonce, "big") + 1).to_bytes(24, "big")
+
+    def sendall(self, data: bytes) -> None:
+        self.socket.sendall(data)

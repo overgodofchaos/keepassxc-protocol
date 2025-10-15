@@ -5,12 +5,12 @@ from pydantic import Field, PrivateAttr, computed_field
 
 from . import classes_responses as responses
 from .classes import KPXProtocol
-from .connection_config import Associates, ConnectionConfig
+from .connection_session import Associates, ConnectionSession
 
 
 class _BaseMessage(KPXProtocol):
     _action: str = PrivateAttr("none")
-    config: ConnectionConfig = Field(exclude=True)
+    session: ConnectionSession = Field(exclude=True)
 
     @computed_field
     @property
@@ -28,12 +28,12 @@ class BaseRequest(_BaseMessage):
 
     @computed_field()
     def nonce(self) -> str:
-        return self.config.nonce_utf8
+        return self.session.nonce_utf8
 
     # noinspection PyPep8Naming
     @computed_field()
     def clientID(self) -> str:
-        return self.config.client_id
+        return self.session.client_id
 
     # noinspection PyPep8Naming
     @computed_field()
@@ -58,8 +58,8 @@ class EncryptedRequest(BaseRequest):
     def message(self) -> str:
         msg = self.unencrypted_message
         encrypted = base64.b64encode(
-            self.config.box.encrypt(msg.model_dump_json().encode("utf-8"),
-                                    nonce=self.config.nonce).ciphertext)
+            self.session.box.encrypt(msg.model_dump_json().encode("utf-8"),
+                                     nonce=self.session.nonce).ciphertext)
         return encrypted.decode("utf-8")
 
 
@@ -78,7 +78,7 @@ class ChangePublicKeysRequest(BaseRequest):
 
     @computed_field()
     def publicKey(self) -> str:
-        return self.config.public_key_utf8
+        return self.session.public_key_utf8
 
 
 class GetDatabasehashMessage(BaseMessage):
@@ -105,7 +105,7 @@ class AssociateMessage(BaseMessage):
 
     @computed_field()
     def key(self) -> str:
-        return self.config.public_key_utf8
+        return self.session.public_key_utf8
 
     # noinspection PyPep8Naming
     @computed_field()

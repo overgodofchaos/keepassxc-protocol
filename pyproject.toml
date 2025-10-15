@@ -28,6 +28,10 @@ packages = [
     { include = "keepassxc_protocol" }
 ]
 
+[project.urls]
+Homepage = "https://github.com/overgodofchaos/keepassxc-protocol"
+Repository = "https://github.com/overgodofchaos/keepassxc-protocol.git"
+
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

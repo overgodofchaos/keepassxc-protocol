@@ -7,10 +7,11 @@ import keepassxc_protocol
 
 @pytest.fixture(scope='module')
 def con() -> keepassxc_protocol.Connection:
+    with open("./tests/files/associate_data.json", encoding="utf-8") as f:
+        associate_data = f.read()
+
     con = keepassxc_protocol.Connection()
-    con.load_associates_json(
-        '{"entries":{"8f1b004cbd837de560b9257b61443f9ae21ee24f4561c87b8f2bb3a6fa7627e0":{"db_hash":"8f1b004cbd837de560b9257b61443f9ae21ee24f4561c87b8f2bb3a6fa7627e0","id":"test","key":"cb7d74ec0efcccbbb23677bc4481fe0325861ce5dd24e4dfb436fe5751fb3429"}}}'
-    )
+    con.load_associates_json(associate_data)
     return con
 
 

@@ -21,8 +21,6 @@ from .winpipe import WinNamedPipe
 log = logger
 
 if platform.system() == "Windows":
-    import getpass
-
     import win32file
 
 _R = TypeVar("_R", bound=resp.BaseResponse)
@@ -44,39 +42,20 @@ class Connection:
             socket=socket_
         )
 
-        self._connect()
+        response = self.change_public_keys()
+        self.session.box = Box(self.session.private_key, PublicKey(base64.b64decode(response.publicKey)))
+        log.debug(f"Session: {self.session}")
 
-    def _send(self,
-              request: req.BaseRequest
-              ) -> dict:
-
-        log.debug(f"Sending request:\n{request.model_dump_json(indent=2)}\n")
-
-        request = request.to_bytes()
-        self.session.socket.sendall(request)
-        self.session.increase_nonce()
-
-        response = self._get_response()
-
-        log.debug(f"Response:\n{json.dumps(response, indent=2)}")
-
-        return response
-
-
-    def _encrypt_message(self, message: req.BaseMessage) -> req.EncryptedRequest:
-        log.debug(f"Unencrypted message:\n{message.model_dump_json(indent=2)}\n")
-
-        return req.EncryptedRequest(session=self.session, unencrypted_message=message)
-
-    def _decrypt(self, data: dict) -> dict:
-
-        server_nonce = base64.b64decode(data["nonce"])
-        decrypted = self.session.box.decrypt(base64.b64decode(data["message"]), server_nonce)
-        unencrypted_message = json.loads(decrypted)
-
-        return unencrypted_message
 
     def _get_response(self) -> dict:
+
+        def decrypt(raw_data: dict) -> dict:
+            server_nonce = base64.b64decode(raw_data["nonce"])
+            decrypted = self.session.box.decrypt(base64.b64decode(raw_data["message"]), server_nonce)
+            unencrypted_message = json.loads(decrypted)
+
+            return unencrypted_message
+
         data = []
         while True:
             new_data = self.session.socket.recv(4096)
@@ -93,52 +72,38 @@ class Connection:
             raise ResponseUnsuccesfulException(json_data)
 
         if "message" in json_data:
-            response = self._decrypt(json_data)
+            response = decrypt(json_data)
         else:
             response = json_data
 
         return response
 
-    def _connect(self, path: tuple[Any, ...] | str | Buffer | None = None) -> None:
-        if path is None:
-            path = Connection._get_socket_path()
-
-        log.debug(f"Connecting to {path}")
-
-        self.session.socket.connect(path)
-
-        response = self.change_public_keys()
-
-        self.session.box = Box(self.session.private_key, PublicKey(base64.b64decode(response.publicKey)))
-
-        log.debug(f"Session: {self.session}")
-
-    @staticmethod
-    def _get_socket_path() -> str:
-        server_name = "org.keepassxc.KeePassXC.BrowserServer"
-        system = platform.system()
-        if system == "Linux" and "XDG_RUNTIME_DIR" in os.environ:
-            flatpak_socket_path = os.path.join(os.environ["XDG_RUNTIME_DIR"], "app/org.keepassxc.KeePassXC",
-                                               server_name)
-            if os.path.exists(flatpak_socket_path):
-                return flatpak_socket_path
-            return os.path.join(os.environ["XDG_RUNTIME_DIR"], server_name)
-        elif system == "Darwin" and "TMPDIR" in os.environ:
-            return os.path.join(os.getenv("TMPDIR"), server_name)
-        elif system == "Windows":
-            path_win = "org.keepassxc.KeePassXC.BrowserServer_" + getpass.getuser()
-            return path_win
-        else:
-            return os.path.join("/tmp", server_name)
-
     def _request(self,
                  message: req.BaseRequest | req.BaseMessage,
                  response_type: type[_R]) -> _R:
+
+        def encrypt_message(unencrypted_message: req.BaseMessage) -> req.EncryptedRequest:
+            log.debug(f"Unencrypted message:\n{unencrypted_message.model_dump_json(indent=2)}\n")
+            return req.EncryptedRequest(session=self.session, unencrypted_message=unencrypted_message)
+
+        def send(request: req.BaseRequest) -> dict:
+            log.debug(f"Sending request:\n{request.model_dump_json(indent=2)}\n")
+
+            request = request.to_bytes()
+            self.session.socket.sendall(request)
+            self.session.increase_nonce()
+
+            response = self._get_response()
+
+            log.debug(f"Response:\n{json.dumps(response, indent=2)}")
+
+            return response
+
         if isinstance(message, req.BaseRequest):
-            data = self._send(message)
+            data = send(message)
         else:
-            request = self._encrypt_message(message)
-            data = self._send(request)
+            encrypted_message = encrypt_message(message)
+            data = send(encrypted_message)
 
         try:
             return response_type.model_validate(data)

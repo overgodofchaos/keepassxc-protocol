@@ -1,12 +1,19 @@
 import base64
+import os
+import platform
 import socket
 from functools import cached_property
+from typing import Any
 
+from loguru import logger as log
 from nacl.public import Box, PrivateKey, PublicKey
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from pydantic_core.core_schema import FieldSerializationInfo
 
 from keepassxc_protocol.winpipe import WinNamedPipe
+
+if platform.system() == "Windows":
+    import getpass
 
 
 class Associate(BaseModel):
@@ -76,10 +83,6 @@ class ConnectionSession(BaseModel):
     associates: Associates = Associates()
     socket: WinNamedPipe | socket.socket
 
-    @cached_property
-    def public_key(self) -> PublicKey:
-        return self.private_key.public_key
-
     @staticmethod
     def _decode(data: PublicKey | bytes) -> str:
         if isinstance(data, bytes):
@@ -88,6 +91,36 @@ class ConnectionSession(BaseModel):
             # noinspection PyProtectedMember
             data_ = data._public_key
         return base64.b64encode(data_).decode("utf-8")
+
+    def _connect(self) -> None:
+        def get_socket_path() -> str:
+            server_name = "org.keepassxc.KeePassXC.BrowserServer"
+            system = platform.system()
+            if system == "Linux" and "XDG_RUNTIME_DIR" in os.environ:
+                flatpak_socket_path = os.path.join(
+                    os.environ["XDG_RUNTIME_DIR"], "app/org.keepassxc.KeePassXC", server_name
+                )
+                if os.path.exists(flatpak_socket_path):
+                    return flatpak_socket_path
+                return os.path.join(os.environ["XDG_RUNTIME_DIR"], server_name)
+            elif system == "Darwin" and "TMPDIR" in os.environ:
+                return os.path.join(os.getenv("TMPDIR"), server_name)
+            elif system == "Windows":
+                path_win = "org.keepassxc.KeePassXC.BrowserServer_" + getpass.getuser()
+                return path_win
+            else:
+                return os.path.join("/tmp", server_name)
+
+        path = get_socket_path()
+        log.debug(f"Connecting to {path}")
+        self.socket.connect(path)
+
+    def model_post_init(self, context: Any, /) -> None:  # noqa: ANN401
+        self._connect()
+
+    @cached_property
+    def public_key(self) -> PublicKey:
+        return self.private_key.public_key
 
     @property
     def public_key_utf8(self) -> str:

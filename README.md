@@ -15,7 +15,7 @@ con = Connection()
 con.associate() # Associate request for current ACTIVE database
 
 response = con.get_logins("https://example.test") # Get ALL data for example.test. CAN be specified without http\https.
-entry = response.entries[0] # First ecntry for example.test.
+entry = response.entries[0] # First entry for example.test.
 
 print(entry.group) # Output: "group2"
 print(entry.login) # Output: "example_test_login"

@@ -48,6 +48,14 @@ class BaseRequest(_BaseMessage):
 
 
 class EncryptedRequest(BaseRequest):
+    """
+{
+    "action": "associate",
+    "message": "<encrypted message>",
+    "nonce": "tZvLrBzkQ9GxXq9PvKJj4iAnfPT0VZ3Q",
+    "clientID": "<clientID>"
+}
+    """
     unencrypted_message: BaseMessage = Field(exclude=True)
 
     @computed_field()
@@ -167,3 +175,8 @@ class GetDatabaseGroupsMessage(BaseMessage):
     """
     _action: str = PrivateAttr("get-database-groups")
     _response = responses.GetDatabaseGroupsResponse
+
+
+# class GetTotpRequset(BaseRequest):
+#     _action: str = PrivateAttr("get-totp")
+#     uuid: str

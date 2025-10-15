@@ -81,3 +81,10 @@ class GetDatabaseGroupsResponse(BaseResponse):
     defaultGroup: str | None = None
     defaultGroupAlwaysAllow: bool = None
     groups: Groups = Field(default_factory=dict)
+
+
+# class GetTotpResponse(BaseResponse):
+#     totp: str
+#     version: str
+#     success: Literal["true"]
+#     nonce: str

@@ -61,11 +61,14 @@ class Connection:
                 self.session.receive()
             )
 
+            log.debug(f"Response data:\n{json.dumps(json_data, indent=2)}")
+
             if "error" in json_data:
                 raise ResponseUnsuccesfulException(json_data)
 
             if "message" in json_data:
                 response = decrypt(json_data)
+                log.debug(f"Response unencrypted message:\n{json.dumps(response, indent=2)}")
             else:
                 response = json_data
 
@@ -175,3 +178,7 @@ class Connection:
     def get_database_groups(self) -> resp.GetDatabaseGroupsResponse:
         message = req.GetDatabaseGroupsMessage(session=self.session)
         return self._request(message, resp.GetDatabaseGroupsResponse)
+
+    # def get_totp(self, uuid: str) -> resp.GetTotpResponse:
+    #     message = req.GetTotpRequset(session=self.session, uuid=uuid)
+    #     return self._request(message, resp.GetTotpResponse)
